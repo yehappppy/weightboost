@@ -1,6 +1,9 @@
 import numpy as np
 import pandas as pd
 import matplotlib.pyplot as plt
+import time
+import threading
+from functools import wraps
 from ucimlrepo import fetch_ucirepo
 from sklearn.preprocessing import OrdinalEncoder
 from sklearn.impute import SimpleImputer
@@ -9,8 +12,43 @@ from weightboost import (
     AdaBoost,
     WeightDecay,
     EpsilonBoost,
-    WeightBoost
+    WeightBoost,
+    C45Tree
 )
+
+# ==================== Timeout Decorator ====================
+class TimeoutError(Exception):
+    """Exception raised when a function times out."""
+    pass
+
+def timeout(seconds=60):
+    """Timeout decorator using threading (works on Windows)"""
+    def decorator(func):
+        @wraps(func)
+        def wrapper(*args, **kwargs):
+            result = [None]
+            error = [None]
+            
+            def target():
+                try:
+                    result[0] = func(*args, **kwargs)
+                except Exception as e:
+                    error[0] = e
+            
+            thread = threading.Thread(target=target)
+            thread.daemon = True
+            thread.start()
+            thread.join(seconds)
+            
+            if thread.is_alive():
+                raise TimeoutError(f"Function {func.__name__} timed out after {seconds} seconds")
+            
+            if error[0] is not None:
+                raise error[0]
+                
+            return result[0]
+        return wrapper
+    return decorator
 
 # ==================== Dataset Loading Functions ====================
 def load_datasets():
@@ -100,47 +138,67 @@ def run_experiment(datasets, noise_levels=[0, 0.05, 0.1, 0.15, 0.2], n_estimator
     
     for ds_name, (X, y) in datasets.items():
         print(f"\n=== Processing dataset: {ds_name} ===")
-        
-        # Split data BEFORE initializing classifiers to ensure consistent feature dimensions
-        X_train, X_test, y_train, y_test = train_test_split(
-            X, y, test_size=0.2, random_state=42
-        )
-        
-        # Initialize classifiers after data split
-        classifiers = {
-            'AdaBoost': AdaBoost(n_estimators=n_estimators),
-            'WeightDecay': WeightDecay(n_estimators=n_estimators, C=0.1),
-            'EpsilonBoost': EpsilonBoost(n_estimators=n_estimators, epsilon=0.1),
-            'WeightBoost': WeightBoost(n_estimators=n_estimators, beta=0.5)
-        }
-        
-        # Store results
-        ds_results = {
-            'clean': {name: [] for name in classifiers},
-            'noisy': {name: [] for name in classifiers}
-        }
-        
-        # Test on clean data
-        print("Testing clean data...")
-        for name, clf in classifiers.items():
-            clf.fit(X_train, y_train)
-            acc = np.mean(clf.predict(X_test) == y_test)
-            ds_results['clean'][name] = acc
-            print(f"{name:12} Accuracy: {acc:.4f}")
-        
-        # Test on noisy data
-        print("Testing noisy data...")
-        for noise in noise_levels:
-            y_noisy = add_noise(y_train, noise_level=noise)
+        try:
+            # Split data BEFORE initializing classifiers to ensure consistent feature dimensions
+            X_train, X_test, y_train, y_test = train_test_split(
+                X, y, test_size=0.2, random_state=42
+            )
+            
+            # Initialize classifiers after data split
+            classifiers = {
+                'C45Tree': C45Tree(min_samples_split=2, max_depth=5),
+                'AdaBoost': AdaBoost(n_estimators=n_estimators),
+                'WeightDecay': WeightDecay(n_estimators=n_estimators, C=0.1),
+                'EpsilonBoost': EpsilonBoost(n_estimators=n_estimators, epsilon=0.1),
+                'WeightBoost': WeightBoost(n_estimators=n_estimators, beta=0.5)
+            }
+            
+            # Store results
+            ds_results = {
+                'clean': {name: [] for name in classifiers},
+                'noisy': {name: {noise: None for noise in noise_levels} for name in classifiers}
+            }
+            
+            # Define a timeout wrapper for fit
+            @timeout(30)  # 30 seconds timeout for training
+            def fit_with_timeout(clf, X, y):
+                return clf.fit(X, y)
+            
+            # Test on clean data
+            print("Testing clean data...")
             for name, clf in classifiers.items():
-                clf.fit(X_train, y_noisy)
-                acc = np.mean(clf.predict(X_test) == y_test)
-                ds_results['noisy'][name].append(acc)
-        
-        results[ds_name] = ds_results
-        
-        # Plot results
-        plot_dataset_results(ds_name, ds_results, noise_levels)
+                try:
+                    start_time = time.time()
+                    fit_with_timeout(clf, X_train, y_train)
+                    acc = np.mean(clf.predict(X_test) == y_test)
+                    ds_results['clean'][name] = acc
+                    print(f"{name:12} Accuracy: {acc:.4f} (Time: {time.time() - start_time:.2f}s)")
+                except Exception as e:
+                    print(f"{name:12} Failed: {str(e)}")
+                    ds_results['clean'][name] = 0.0
+            
+            # Test on noisy data
+            print("Testing noisy data...")
+            for noise in noise_levels:
+                print(f"  Noise level: {noise}")
+                y_noisy = add_noise(y_train, noise_level=noise)
+                for name, clf in classifiers.items():
+                    try:
+                        start_time = time.time()
+                        fit_with_timeout(clf, X_train, y_noisy)
+                        acc = np.mean(clf.predict(X_test) == y_test)
+                        ds_results['noisy'][name][noise] = acc
+                        print(f"  {name:12} Accuracy: {acc:.4f} (Time: {time.time() - start_time:.2f}s)")
+                    except Exception as e:
+                        print(f"  {name:12} Failed: {str(e)}")
+                        ds_results['noisy'][name][noise] = 0.0
+            
+            results[ds_name] = ds_results
+            
+            # Plot results
+            plot_dataset_results(ds_name, ds_results, noise_levels)
+        except Exception as e:
+            print(f"Error processing dataset {ds_name}: {str(e)}")
     
     return results
 
@@ -151,7 +209,7 @@ def plot_dataset_results(ds_name, results, noise_levels):
     # Accuracy comparison
     plt.subplot(1, 2, 1)
     plt.bar(results['clean'].keys(), results['clean'].values(), 
-            color=['blue', 'green', 'orange', 'red'])
+            color=['purple', 'blue', 'green', 'orange', 'red'])
     plt.title(f'{ds_name} - Clean Data Accuracy')
     plt.ylim(0.5, 1.05)
     for i, v in enumerate(results['clean'].values()):
@@ -161,8 +219,9 @@ def plot_dataset_results(ds_name, results, noise_levels):
     # Noise robustness
     plt.subplot(1, 2, 2)
     for name in results['noisy']:
-        plt.plot(noise_levels, results['noisy'][name], 
-                marker='o', label=name)
+        # Convert dictionary to list for plotting
+        noise_results = [results['noisy'][name].get(noise, 0.0) for noise in noise_levels]
+        plt.plot(noise_levels, noise_results, marker='o', label=name)
     plt.title(f'{ds_name} - Noise Robustness')
     plt.xlabel('Noise Level')
     plt.ylabel('Accuracy')

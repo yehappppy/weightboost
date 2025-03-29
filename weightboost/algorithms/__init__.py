@@ -4,6 +4,7 @@ Boosting algorithms module.
 This module contains implementations of various boosting algorithms.
 """
 
+from weightboost.algorithms.c45_tree import C45Tree
 from weightboost.algorithms.adaboost import AdaBoost
 from weightboost.algorithms.weight_decay import WeightDecay
 from weightboost.algorithms.epsilon_boost import EpsilonBoost
