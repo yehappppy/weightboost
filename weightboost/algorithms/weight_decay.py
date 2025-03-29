@@ -92,6 +92,13 @@ class WeightDecay(AdaBoost):
             
             # Update sample weights (including Weight Decay regularization)
             w = np.exp(-y * H - self.C * zeta)
-            w = w / np.sum(w)  # Normalize
+            
+            # Prevent division by zero or very small numbers
+            sum_w = np.sum(w)
+            if sum_w > 1e-10:  
+                w = w / sum_w  # Normalize
+            else:
+                # If weights are too small, reinitialize with uniform weights
+                w = np.ones(n_samples) / n_samples
         
         return self

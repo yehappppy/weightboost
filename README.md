@@ -26,6 +26,24 @@ The project implements several boosting algorithms for comparison:
 3. **ε-Boost**: A variant that uses small fixed weights for base classifiers.
 4. **WeightBoost**: The novel algorithm that uses input-dependent regularization.
 
+```bash
+weightboost/
+├── __init__.py                 # Package entry point with imports
+├── algorithms/                 # Algorithm implementations
+│   ├── __init__.py
+│   ├── adaboost.py             # AdaBoost implementation
+│   ├── weight_decay.py         # Weight Decay implementation
+│   ├── epsilon_boost.py        # ε-Boost implementation
+│   └── weight_boost.py         # WeightBoost implementation
+├── evaluation/                 # Evaluation utilities
+│   ├── __init__.py
+│   └── evaluator.py            # Functions for evaluating algorithms
+└── utils/                      # Utility functions
+    ├── __init__.py
+    ├── data_utils.py           # Data manipulation utilities
+    └── visualization.py        # Visualization utilities
+```
+
 ## Evaluation
 
 The implementation includes evaluation functions for:

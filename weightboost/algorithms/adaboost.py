@@ -7,7 +7,7 @@ This module implements the original AdaBoost algorithm by Freund and Schapire.
 import numpy as np
 from sklearn.tree import DecisionTreeClassifier
 from sklearn.base import clone
-
+from sklearn.utils.validation import check_X_y, check_array
 
 class AdaBoost:
     """
@@ -68,22 +68,29 @@ class AdaBoost:
             pred = model.predict(X)
             
             # Calculate weighted error
-            err = np.sum(w * (pred != y)) / np.sum(w)
+            err = np.clip(np.sum(w * (pred != y)) / np.sum(w), 1e-10, 1 - 1e-10)
             
             # Check if error rate is too high
             if err >= 0.5:
                 break
                 
             # Calculate model weight
-            alpha = 0.5 * np.log((1 - err) / max(err, 1e-10))
+            alpha = 0.5 * np.log((1 - err) / err)
             
             # Save model and weight
             self.models.append(model)
             self.alphas.append(alpha)
             
             # Update sample weights
-            w = w * np.exp(-alpha * y * pred)
-            w = w / np.sum(w)  # Normalize
+            w *= np.exp(-alpha * y * pred)
+            
+            # Prevent division by zero or very small numbers
+            sum_w = np.sum(w)
+            if sum_w > 1e-10:  
+                w /= sum_w  # Normalize
+            else:
+                # If weights are too small, reinitialize with uniform weights
+                w = np.ones(n_samples) / n_samples
         
         return self
     
@@ -101,8 +108,8 @@ class AdaBoost:
         y : array-like of shape (n_samples,)
             The predicted classes, with values in {-1, 1}.
         """
-        n_samples = X.shape[0]
-        H = np.zeros(n_samples)
+        X = check_array(X)
+        H = np.zeros(X.shape[0])
         
         for alpha, model in zip(self.alphas, self.models):
             H += alpha * model.predict(X)
