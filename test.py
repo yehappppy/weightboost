@@ -80,7 +80,7 @@ def load_datasets():
             df[cat_cols] = encoder.fit_transform(df[cat_cols])
         
         return df
-
+    '''
     # 1. Ionosphere (ID 52)
     ionosphere = fetch_ucirepo(id=52)
     X = encode_categorical(ionosphere.data.features).to_numpy()
@@ -122,6 +122,7 @@ def load_datasets():
     X = encode_categorical(cmc.data.features).to_numpy()
     y = np.where(cmc.data.targets.iloc[:, 0].isin([2, 3]), 1, -1)
     datasets['Contraceptive'] = (X, y)
+    '''
 
     # 8. Spambase (ID 94)
     spambase = fetch_ucirepo(id=94)
@@ -160,7 +161,8 @@ def run_experiment(datasets, noise_levels=[0, 0.05, 0.1, 0.15, 0.2], n_estimator
             }
             
             # Define a timeout wrapper for fit
-            @timeout(30)  # 30 seconds timeout for training
+            # @timeout(30)  # 30 seconds timeout for training
+            @timeout(120)
             def fit_with_timeout(clf, X, y):
                 return clf.fit(X, y)
             
