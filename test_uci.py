@@ -80,7 +80,7 @@ def load_datasets():
             df[cat_cols] = encoder.fit_transform(df[cat_cols])
         
         return df
-    '''
+
     # 1. Ionosphere (ID 52)
     ionosphere = fetch_ucirepo(id=52)
     X = encode_categorical(ionosphere.data.features).to_numpy()
@@ -122,7 +122,6 @@ def load_datasets():
     X = encode_categorical(cmc.data.features).to_numpy()
     y = np.where(cmc.data.targets.iloc[:, 0].isin([2, 3]), 1, -1)
     datasets['Contraceptive'] = (X, y)
-    '''
 
     # 8. Spambase (ID 94)
     spambase = fetch_ucirepo(id=94)

@@ -21,5 +21,6 @@ setup(
         "scikit-learn>=0.24.0",
         "matplotlib>=3.3.0",
         "pandas>=1.1.0",
+        "nltk>=3.6.0",
     ],
 )
