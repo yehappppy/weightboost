@@ -10,7 +10,7 @@ from nltk.corpus import stopwords
 from nltk.stem import PorterStemmer
 import nltk
 import warnings
-from weightboost import WeightBoost,AdaBoost
+from weightboost import WeightBoost, AdaBoost
 warnings.filterwarnings('ignore')
 np.random.seed(66)
 
@@ -18,129 +18,130 @@ np.random.seed(66)
 try:
     nltk.download('stopwords', quiet=True)
 except:
-    print("无法下载NLTK资源，请确保您已经安装了NLTK")
+    print("Failed to download NLTK resources. Please ensure NLTK is properly installed.")
 
 def preprocess_reuters(data_path):
     """
-    预处理 Reuters 数据集（多标签任务）
-    参数：
-        data_path (str): 输入的 Excel 文件路径
-    返回：
-        X_train, y_train, X_test, y_test: 预处理后的训练集和测试集
+    Preprocess Reuters dataset (multi-label task)
+    
+    Parameters:
+        data_path (str): Path to input Excel file
+    
+    Returns:
+        X_train, y_train, X_test, y_test: Preprocessed training and test sets
     """
-    # 1. 读取数据
-    print("读取数据...")
+    # 1. Load data
+    print("Loading data...")
     df = pd.read_excel(data_path)
-    df['text'] = df['text'].fillna("")  # 确保文本列没有空值
-    df['categories'] = df['categories'].fillna("[]")  # 确保类别列没有空值
+    df['text'] = df['text'].fillna("")  # Ensure text column has no null values
+    df['categories'] = df['categories'].fillna("[]")  # Ensure categories column has no null values
 
-    # 将字符串形式的类别解析为 Python 列表
-    print("解析类别列...")
+    # Parse string-formatted categories into Python lists
+    print("Parsing categories column...")
     df['categories'] = df['categories'].apply(lambda x: ast.literal_eval(x) if isinstance(x, str) else x)
 
-    # 2. 文本预处理
-    print("进行文本清理...")
-    stop_words = set(stopwords.words("english"))  # 停用词
-    stemmer = PorterStemmer()  # 词干提取器
+    # 2. Text preprocessing
+    print("Cleaning text...")
+    stop_words = set(stopwords.words("english"))  # Stopwords
+    stemmer = PorterStemmer()  # Stemmer
 
     def tokenize_and_clean(text):
-        # 转小写
+        # Convert to lowercase
         text = text.lower()
-        # 去除标点符号
+        # Remove punctuation
         text = re.sub(r"[^\w\s]", "", text)
-        # 分词并去除停用词，进行词干提取
+        # Tokenize, remove stopwords, and apply stemming
         tokens = text.split()
         tokens = [stemmer.stem(word) for word in tokens if word not in stop_words]
         return " ".join(tokens)
 
-    # 对所有文本进行清理
+    # Clean all text
     df['cleaned_text'] = df['text'].apply(tokenize_and_clean)
 
-    # 3. 特征选择：使用 TF-IDF 向量化
-    print("进行特征选择...")
-    vectorizer = TfidfVectorizer(max_features=2000)  # 限制最多 2000 个特征
-    X = vectorizer.fit_transform(df['cleaned_text'])  # 文档向量化
+    # 3. Feature selection: TF-IDF vectorization
+    print("Performing feature selection...")
+    vectorizer = TfidfVectorizer(max_features=2000)  # Limit to 2000 features max
+    X = vectorizer.fit_transform(df['cleaned_text'])  # Document vectorization
 
-    # 提取类别标签并进行多标签编码
-    print("进行多标签编码...")
+    # Extract category labels and perform multi-label encoding
+    print("Performing multi-label encoding...")
     mlb = MultiLabelBinarizer()
-    y = mlb.fit_transform(df['categories'])  # 将类别转换为多标签 one-hot 编码
+    y = mlb.fit_transform(df['categories'])  # Convert categories to multi-label one-hot encoding
 
-    # 将 MultiLabelBinarizer 类别保存为属性，便于后续解码
+    # Save MultiLabelBinarizer classes as attribute for later decoding
     preprocess_reuters.mlb_classes = mlb.classes_
 
-    # 4. 数据集划分
-    print("划分训练集和测试集...")
+    # 4. Dataset splitting
+    print("Splitting into training and test sets...")
     train_indices = df[df['ids'].str.startswith('training')].index
     test_indices = df[df['ids'].str.startswith('test')].index
 
     X_train, X_test = X[train_indices], X[test_indices]
     y_train, y_test = y[train_indices], y[test_indices]
 
-    print("预处理完成！")
+    print("Preprocessing completed!")
     return X_train, y_train, X_test, y_test, mlb.classes_
 
 def convert_labels_to_binary(y, positive=1, negative=-1):
     """
-    将0/1标签转换为-1/1标签，适用于AdaBoost和WeightBoost
+    Convert 0/1 labels to -1/1 labels for AdaBoost and WeightBoost compatibility
     """
     return np.where(y == 1, positive, negative)
 
 def main():
-    # 数据路径
+    # Data path
     data_path = "./data/reutersNLTK.xlsx"
     
-    # 预处理数据
+    # Preprocess data
     X_train, y_train, X_test, y_test, categories = preprocess_reuters(data_path)
     
-    print(f"训练集大小: {X_train.shape}")
-    print(f"测试集大小: {X_test.shape}")
-    print(f"类别数量: {y_train.shape[1]}")
+    print(f"Training set size: {X_train.shape}")
+    print(f"Test set size: {X_test.shape}")
+    print(f"Number of categories: {y_train.shape[1]}")
     
-    # 选择10个最常见的类别
+    # Select top 10 most frequent categories
     category_counts = np.sum(y_train, axis=0)
     top_10_indices = np.argsort(category_counts)[-10:]
     top_10_categories = categories[top_10_indices]
     
-    print(f"选择的10个最常见类别: {top_10_categories}")
+    print(f"Selected top 10 categories: {top_10_categories}")
     
-    # 准备结果表格
+    # Prepare results table
     results = []
     
     for i, cat_idx in enumerate(top_10_indices):
         cat_name = categories[cat_idx]
-        print(f"\n处理类别 {cat_name} ({i+1}/10)...")
+        print(f"\nProcessing category {cat_name} ({i+1}/10)...")
         
-        # 获取当前类别的标签
+        # Get labels for current category
         y_train_cat = y_train[:, cat_idx]
         y_test_cat = y_test[:, cat_idx]
         
-        # 将标签转换为 {-1, 1} 格式，适用于AdaBoost和WeightBoost
+        # Convert labels to {-1, 1} format for AdaBoost and WeightBoost
         y_train_binary = convert_labels_to_binary(y_train_cat)
         y_test_binary = convert_labels_to_binary(y_test_cat)
         
-        # 训练C4.5决策树（基准）
-        print("训练C4.5决策树...")
+        # Train C4.5 Decision Tree (baseline)
+        print("Training C4.5 Decision Tree...")
         c45 = DecisionTreeClassifier(criterion='entropy')
-        # c45 = C45Tree(min_samples_split=2, max_depth=5)
         c45.fit(X_train, y_train_cat)
         y_pred_c45 = c45.predict(X_test)
         f1_c45 = f1_score(y_test_cat, y_pred_c45)
 
-        print("训练AdaBoost...")
+        print("Training AdaBoost...")
         ada = AdaBoost(
             base_classifier=DecisionTreeClassifier(criterion='entropy'),
             n_estimators=50
         )
         ada.fit(X_train, y_train_binary)
         y_pred_ada = ada.predict(X_test)
-        # 将-1/1预测转换回0/1以计算F1分数
+        # Convert -1/1 predictions back to 0/1 for F1 calculation
         y_pred_ada_01 = np.where(y_pred_ada == 1, 1, 0)
         f1_ada = f1_score(y_test_cat, y_pred_ada_01)
         
         ada_impro = ((f1_ada - f1_c45) / f1_c45) * 100
         
-        print("训练WeightBoost...")
+        print("Training WeightBoost...")
         wb = WeightBoost(
             base_classifier=DecisionTreeClassifier(criterion='entropy'),
             n_estimators=50,
@@ -148,7 +149,7 @@ def main():
         )
         wb.fit(X_train, y_train_binary)
         y_pred_wb = wb.predict(X_test)
-        # 将-1/1预测转换回0/1以计算F1分数
+        # Convert -1/1 predictions back to 0/1 for F1 calculation
         y_pred_wb_01 = np.where(y_pred_wb == 1, 1, 0)
         f1_wb = f1_score(y_test_cat, y_pred_wb_01)
         
@@ -165,16 +166,16 @@ def main():
         
     results_df = pd.DataFrame(results)
     
-    # F1分数为4位小数
+    # Format F1 scores to 4 decimal places
     results_df['C4.5_F1'] = results_df['C4.5_F1'].apply(lambda x: f"{x:.4f}")
     results_df['AdaBoost_F1'] = results_df['AdaBoost_F1'].apply(lambda x: f"{x:.4f}")
     results_df['WeightBoost_F1'] = results_df['WeightBoost_F1'].apply(lambda x: f"{x:.4f}")
     
-    print("\n表格结果:")
+    print("\nResults table:")
     print(results_df[['Category', 'C4.5_F1', 'AdaBoost_F1', 'AdaBoost_Impro', 'WeightBoost_F1', 'WeightBoost_Impro']].to_string(index=False))
     
     results_df.to_csv('./result/reuters_boosting_results.csv', index=False)
-    print("\n结果已保存到 reuters_boosting_results.csv")
+    print("\nResults saved to reuters_boosting_results.csv")
 
 if __name__ == "__main__":
     main()
